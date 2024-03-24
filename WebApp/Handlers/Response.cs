@@ -14,6 +14,7 @@ namespace WebApp.Handlers;
 [JsonDerivedType(typeof(ShowRolesResponse), "show_roles")]
 [JsonDerivedType(typeof(UpdateLeaderboardResponse), "update_leaderboard")]
 [JsonDerivedType(typeof(GameFinishedResponse), "game_finished")]
+[JsonDerivedType(typeof(TimerSyncResponse), "timer_sync")]
 public abstract class Response;
 
 
@@ -29,7 +30,13 @@ public class PlayerInLeaderboardInfo
     [JsonPropertyName("score")] public int Score { get; set; }
 }
 
-public class ErrorResponse(string message) : Response
+public class ListenerInfo
+{
+    [JsonPropertyName("nickname")] public string Nickname { get; set; } = default!;
+    [JsonPropertyName("player_id")] public string PlayerId { get; set; } = default!;
+}
+
+public class ErrorResponse(string message = ErrorResponseString.SomethingWentWrong) : Response
 {
     [JsonPropertyName("message")] public string Message { get; set; } = message;
 }
@@ -60,7 +67,7 @@ public class ShowCardEncryptedResponse : Response
 public class ShowCardDecryptedResponse : Response
 {
     [JsonPropertyName("target")] public string Target { get; set; } = default!;
-    [JsonPropertyName("players")] public List<string> Players { get; set; } = [];
+    [JsonPropertyName("players")] public List<ListenerInfo> Listeners { get; set; } = [];
 }
 
 public class ShowRolesResponse : Response
@@ -77,4 +84,9 @@ public class UpdateLeaderboardResponse : Response
 public class GameFinishedResponse : Response
 {
     [JsonPropertyName("leaderboard")] public List<PlayerInLeaderboardInfo> PlayerInLeaderboard { get; set; } = [];
+}
+
+public class TimerSyncResponse : Response
+{
+    [JsonPropertyName("seconds_left")] public int SecondsLeft { get; set; }
 }

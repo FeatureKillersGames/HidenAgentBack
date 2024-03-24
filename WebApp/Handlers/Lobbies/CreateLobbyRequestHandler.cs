@@ -1,41 +1,41 @@
-﻿using MediatR;
+﻿using System.Diagnostics;
+using MediatR;
 using MongoDB.Driver;
 using Sqids;
 using WebApp.Models;
 using WebApp.Services;
+using WebApp.Services.MongoCollections;
 using WebApp.Utils;
 
 namespace WebApp.Handlers.Lobbies;
 
 public class CreateLobbyRequestHandler(
     IConnectionsService connectionsService,
-    MongoDbService mongoDbService,
-    SqidsEncoder<int> sqidsEncoder): IRequestHandler<CreateLobbyRequest, Unit>
+    ILobbyService lobbyService,
+    SqidsEncoder<int> sqidsEncoder): IRequestHandler<CreateLobbyRequest, ErrorResponse?>
 {
-    public async Task<Unit> Handle(CreateLobbyRequest request, CancellationToken cancellationToken)
+    public async Task<ErrorResponse?> Handle(CreateLobbyRequest request, CancellationToken cancellationToken)
     {
-        await using var player = 
-            await mongoDbService.Players.FindTrackableEntity(player => player.PlayerId == request.PlayerId);
-
-        var lobbyWithMaxLobbyId = await mongoDbService.Lobbies
-            .Find(_ => true)
-            .SortByDescending(lobby => lobby.LobbyId)
-            .FirstOrDefaultAsync(cancellationToken);
-        var lobby = new Lobby(){LobbyId = lobbyWithMaxLobbyId?.LobbyId + 1 ?? 0};
-        lobby.Players.Add(new LobbyPlayer(){PlayerId = player.Value!.PlayerId, Nickname = player.Value.Nickname});
-        await mongoDbService.Lobbies.InsertOneAsync(lobby,cancellationToken: cancellationToken);
+        var player = await request.GetPlayer();
+        var lobby = await lobbyService.CreateLobby();
+        if (lobby == null) throw new UnreachableException("created lobby is null");
         
-        player.Value.CurrentLobbyId = lobby.Id!;
+        lobby.Value.Players.Add(new LobbyPlayer(){PlayerId = player.Value.PlayerId, Nickname = player.Value.Nickname});
+        player.Value.CurrentLobbyId = lobby.Value.Id!;
+        
         await connectionsService.SendMessage(request.PlayerId, 
             new MoveToLobbyResponse()
             {
-                LobbyId = sqidsEncoder.Encode(lobby.LobbyId),
+                LobbyId = sqidsEncoder.Encode(lobby.Value.LobbyId),
                 Players =
                 [
-                    .. lobby.Players.Select(lobbyPlayer => new PlayerInLobbyInfo()
+                    .. lobby.Value.Players.Select(lobbyPlayer => new PlayerInLobbyInfo()
                         { Nickname = lobbyPlayer.Nickname, IsReady = lobbyPlayer.IsReady })
                 ]
             });
-        return Unit.Value;
+
+        await Task.WhenAll(player.SaveEntity(), lobby.SaveEntity());
+        
+        return null;
     }
 }

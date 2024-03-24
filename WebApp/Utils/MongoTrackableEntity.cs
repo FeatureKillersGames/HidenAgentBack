@@ -3,9 +3,9 @@ using MongoDB.Driver;
 
 namespace WebApp.Utils;
 
-public class MongoTrackableEntity<T> : IAsyncDisposable
+public class MongoTrackableEntity<T>
 {
-    public T? Value => _value;
+    public T Value => _value;
     private bool _saveAble = true;
     private readonly IMongoCollection<T> _mongoCollection;
     private readonly T _value;
@@ -20,7 +20,7 @@ public class MongoTrackableEntity<T> : IAsyncDisposable
         _filter = filter;
     }
 
-    public async ValueTask DisposeAsync()
+    public async Task SaveEntity()
     {
         if (_saveAble && _value != null)
         {
@@ -37,11 +37,11 @@ public class MongoTrackableEntity<T> : IAsyncDisposable
 
 public static class MongoTrackableEntityExtensions
 {
-    public static async Task<MongoTrackableEntity<T>> FindTrackableEntity<T>(
+    public static async Task<MongoTrackableEntity<T>?> FindTrackableEntity<T>(
         this IMongoCollection<T> collection,
         Expression<Func<T, bool>> filter)
     {
         var value = await collection.Find(filter).FirstOrDefaultAsync();
-        return new MongoTrackableEntity<T>(collection, value, filter);
+        return value == null ? null : new MongoTrackableEntity<T>(collection, value, filter);
     }
 }

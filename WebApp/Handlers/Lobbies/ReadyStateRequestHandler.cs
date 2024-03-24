@@ -8,42 +8,35 @@ namespace WebApp.Handlers.Lobbies;
 public class ReadyStateRequestHandler (
     MongoDbService mongoDbService,
     IConnectionsService connectionsService
-    ): Request, IRequestHandler<ReadyStateRequest, Unit>
+    ): Request, IRequestHandler<ReadyStateRequest, ErrorResponse?>
 {
-    public async Task<Unit> Handle(ReadyStateRequest request, CancellationToken cancellationToken)
+    public async Task<ErrorResponse?> Handle(ReadyStateRequest request, CancellationToken cancellationToken)
     {
-        var player = await mongoDbService.Players
-            .Find(player => player.PlayerId == request.PlayerId)
-            .SingleAsync(cancellationToken);
-        if (string.IsNullOrEmpty(player.CurrentLobbyId))
+        var lobby = await request.GetLobby();
+        if (lobby == null)
         {
-            await connectionsService.SendMessage(request.PlayerId, new ErrorResponse(ErrorResponseString.NotInLobby));
-            return Unit.Value;
+            return new ErrorResponse(ErrorResponseString.NotInLobby);
         }
         
-        await using var lobby = await mongoDbService.Lobbies
-            .FindTrackableEntity(lobby => lobby.Id == player.CurrentLobbyId);
-        if (lobby.Value == null)
-        {
-            await connectionsService.SendMessage(request.PlayerId, new ErrorResponse(ErrorResponseString.NotInLobby));
-            return Unit.Value;
-        }
-
         lobby.Value.Players.Single(lobbyPlayer => lobbyPlayer.PlayerId == request.PlayerId).IsReady = request.IsReady;
-        var lobbyUpdatedResponse = new LobbyUpdatedResponse()
-        {
-            PlayerInfos =
-            [
-                .. lobby.Value.Players.Select(lobbyPlayer => new PlayerInLobbyInfo()
-                    { Nickname = lobbyPlayer.Nickname, IsReady = lobbyPlayer.IsReady })
-            ],
-            CanStartRoom = lobby.Value.Players.All(p => p.IsReady) && lobby.Value.Players.Count > 2
-        };
-        foreach (var playerInLobby in lobby.Value.Players.Select(lobbyPlayer => lobbyPlayer.PlayerId))
-        {
-            await connectionsService.SendMessage(playerInLobby, lobbyUpdatedResponse);
-            lobbyUpdatedResponse.CanStartRoom = false;
-        }
-        return Unit.Value;
+        var lobbyPlayers = lobby.Value.Players
+            .Select(lobbyPlayer => new PlayerInLobbyInfo()
+                {
+                    Nickname = lobbyPlayer.Nickname, IsReady = lobbyPlayer.IsReady
+                })
+            .ToList();
+        var canStartRoom = lobby.Value.Players.All(p => p.IsReady) && lobby.Value.Players.Count > 2;
+
+        await Task.WhenAll(
+            Task.WhenAll(lobby.Value.Players.Select((p, i) => connectionsService.SendMessage(p.PlayerId,
+                new LobbyUpdatedResponse()
+                {
+                    CanStartRoom = canStartRoom && i == 0,
+                    PlayerInfos = lobbyPlayers
+                }))),
+            lobby.SaveEntity()
+        );
+
+        return null;
     }
 }

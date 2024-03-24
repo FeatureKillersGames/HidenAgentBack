@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using MediatR;
 using WebApp.Handlers;
+using WebApp.Services.MongoCollections;
 
 namespace WebApp.Services;
 
@@ -43,13 +44,18 @@ public class ConnectionsService(
                 using (var scope = serviceScopeFactory.CreateScope())
                 {
                     var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+                    var requestInitializer = scope.ServiceProvider.GetRequiredService<IRequestInitializer>();
 
-                    var request =
-                        JsonSerializer.Deserialize<Request>(Encoding.UTF8.GetString(buffer, 0, receiveResult.Count));
+                    var request = JsonSerializer.Deserialize<Request>(Encoding.UTF8.GetString(buffer, 0, receiveResult.Count));
                     if (request != null)
                     {
+                        requestInitializer.InitializeRequest(request, playerId);
                         request.PlayerId = playerId;
-                        await mediator.Send(request);
+                        var response = await mediator.Send(request);
+                        if (response is ErrorResponse errorResponse)
+                        {
+                            await SendMessage(playerId, errorResponse);
+                        }
                     }
                 }
 

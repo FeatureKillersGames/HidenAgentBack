@@ -6,6 +6,7 @@ using MediatR;
 using MongoDB.Driver;
 using WebApp.Handlers;
 using WebApp.Models;
+using WebApp.Services.MongoCollections;
 
 namespace WebApp.Services;
 
@@ -16,8 +17,9 @@ public interface IPlayerJoinExitHandlingService
 }
 
 public class PlayerJoinExitHandlingService(
-    MongoDbService mongoDbService,
-    IMediator mediator
+    IPlayerService playerService,
+    IMediator mediator,
+    IRequestInitializer requestInitializer
     ): IPlayerJoinExitHandlingService
 {
     public async Task HandleJoin(WebSocket webSocket, string playerId)
@@ -25,19 +27,15 @@ public class PlayerJoinExitHandlingService(
         var buffer = new byte[1024];
         var received = await webSocket.ReceiveAsync(buffer, CancellationToken.None);
         var request = JsonSerializer.Deserialize<JoinRequest>(Encoding.UTF8.GetString(buffer, 0, received.Count))!;
-        var player = new Player()
-        {
-            PlayerId = playerId,
-            Nickname = request.Nickname
-        };
-        await mongoDbService.Players.InsertOneAsync(player);
+        await playerService.CreatePlayer(playerId, request.Nickname);
     }
 
     public async Task HandleExit(string playerId)
     {
-        await mediator.Send(new ExitLobbyRequest() { PlayerId = playerId });
-        await mongoDbService.Players
-            .DeleteOneAsync(new ExpressionFilterDefinition<Player>(player => player.PlayerId == playerId));
+        var exitLobbyRequest = new ExitLobbyRequest();
+        requestInitializer.InitializeRequest(exitLobbyRequest, playerId);
+        await mediator.Send(exitLobbyRequest);
+        await playerService.DeletePlayerByPlayerId(playerId);
     }
 
     private class JoinRequest

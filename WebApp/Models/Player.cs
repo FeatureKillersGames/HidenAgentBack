@@ -11,6 +11,6 @@ public class Player
 
     public string PlayerId { get; set; } = default!;
     public string Nickname { get; set; } = default!;
-    public string CurrentLobbyId { get; set; } = default!;
-    public string CurrentGameId { get; set; } = default!;
+    public string? CurrentLobbyId { get; set; }
+    public string? CurrentGameId { get; set; }
 }

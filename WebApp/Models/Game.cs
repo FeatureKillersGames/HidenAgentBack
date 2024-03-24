@@ -10,6 +10,7 @@ public class Game
     public string? Id { get; set; }
     public List<PlayerInGame> PlayersInGame { get; set; } = [];
     public int CurrentPlayerIdx { get; set; }
+    public string? TimerId { get; set; }
 
 }
 
